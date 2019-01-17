@@ -1,81 +1,101 @@
-#include <stdio.h>
-#include <stdlib.h>
+#include "ext2.h"
 
-#include <fcntl.h>
-#include <ext2fs/ext2_fs.h>
+#define TRK 18
+#define CYL 36
+#define BLK 1024
 
-// define shorter TYPES, save typing efforts
-typedef struct ext2_group_desc  GD;
-typedef struct ext2_super_block SUPER;
-typedef struct ext2_inode       INODE;
-typedef struct ext2_dir_entry_2 DIR;    // need this for new version of e2fs
+int color = 0x0A;
 
-GD    *gp;
-SUPER *sp;
-INODE *ip;
-DIR   *dp; 
-
-char buf[1024];
-int fd;
-int iblock;
-
-char *dev = "mtximage";
-
-int getblk(int fd, int blk, char *buf)
-{
-  lseek(fd, blk*1024, 0);
-  read(fd, buf, 1024);
+int getblk(int blk, char *buf){
+    readfd( blk/18, ((blk)%18)/9, ( ((blk)%18)%9)<<1, buf);
 }
 
-int show(char *dev)
-{
-  int i;
-  char *cp;
+int prints(char *s){
+	while (*s) 
+		putc(*s++);
+}
+		
+int gets(char s[]){
 
-  fd = open(dev, O_RDONLY);
-  if (fd < 0){
-    printf("open failed\n");
-    exit(1);
-  }
-
-  getblk(fd, 1, buf);
-  sp = (SUPER *)buf;
-  printf("magic = 0x%4x\n", sp->s_magic);
-  getchar();
-
-
-  getblk(fd, 2, buf);
-  gp = (GD *)buf;
-
-  iblock = gp->bg_inode_table;
-  printf("inode_block=%d\n", iblock);
-  
-  getblk(fd, iblock, buf);
-  ip = (INODE *)buf + 1;
-  
-  printf("mode=0x%4x ", ip->i_mode);
-  printf("size=%d\n", ip->i_size);
-
-  for (i=0; i<15; i++){
-    if (ip->i_block[i])
-       printf("i_block[%d]=%d\n", i, ip->i_block[i]);
-  }
-
-  getblk(fd, ip->i_block[0], buf);
-  dp = (DIR *)buf;
-  cp = buf;
-  
-  while(cp < buf + 1024){
-     printf("%s ", dp->name);
-     getchar();
-     cp += dp->rec_len;
-     dp = (DIR *)cp;
-  }
+	while ((*s = getc()) != '\r') 
+		putc(*s++);
+	*s = 0;
 }
 
-int main(int argc, char *argv[ ])
-{
-  if (argc>1)
-     dev = argv[1];
-  show(dev);
+main(){
+
+	char name[64], buf[1024], blk_buf[1024], *cp;
+
+	GD *gp;
+	INODE *ip;
+	DIR *dp;
+
+	int i;
+
+	u16 iblk;
+
+
+	prints("Reading block 2\n\r");
+	getblk((u16)2, buf);
+
+	gp = (GD*)buf;
+
+	iblk = (u16)gp->bg_inode_table;
+
+
+
+	prints("inode_block="); putc(iblk + '0'); prints("\n\r");
+
+	prints("Reading inode table block\n\r");
+	getblk(iblk, buf);
+
+	ip = (INODE *)buf + 1;
+
+	//to get rid of garbage characters, copy into a string with length 
+	//dp->name_len and print copied string
+	
+	for(i = 0; i < 12; i++){
+		prints("block ["); putc(i + '0'); prints("]: "); prints("\n\r    ");
+
+		if(ip->i_block[i] == 0){
+			prints("No entries in block ");
+			putc(i + '0');
+			prints("\n\r");
+			continue;
+		}
+
+
+		getblk((u16)ip->i_block[i], blk_buf);
+
+
+		cp = blk_buf;
+		dp = (DIR *)blk_buf;
+
+		while(cp < blk_buf + 1024)
+		{
+			prints(dp->name);
+			prints(", ");
+
+			cp += dp->rec_len;
+			dp = (DIR *)cp;
+		}
+		prints("\n\r");
+
+	}
+
+	prints("\n\r");
+
+	
+
+	while(1){
+		prints("Enter a string: ");
+		gets(name);
+		if(name[0] == 0)
+			break;
+		prints("\n\rYou entered: "); 
+		prints(name); 
+		prints("\n\r");
+	}
+	prints("return to assembly and hang\n\r");
 }
+
